@@ -211,3 +211,145 @@ graph TD
 *   **Week 4:** 前后端联调、Bug修复、Docker化部署到云服务器，并撰写项目文档和总结。**(项目闭环与沉淀)**
 
 这个方案为你提供了一张清晰的作战地图。按照这个蓝图，你将能在一个月内，有条不紊地构建出一个技术先进、功能完整、令人印象深刻的毕业设计/求职/申请项目。
+
+
+
+
+---
+
+### **项目名称：** “**Tech-Pulse V2.0**” - 事件驱动的AI金融舆情实时分析系统
+
+### **项目愿景 (Elevator Pitch):**
+> 本系统是一套准生产级的金融科技产品原型，旨在通过事件驱动架构和实时通信技术，捕捉并量化影响中国A股高科技公司的信息流。它利用以大语言模型（如Claude 3）为核心的智能AI引擎，将非结构化的新闻、公告转化为精准的情绪指数和结构化事件，并通过WebSocket向前端动态推送，实现真正的实时决策支持。
+
+---
+
+### **一、 系统架构图 (V2.0)**
+
+本系统采用现代化的**事件驱动微服务架构**，确保了高可用性、高扩展性和实时性。
+
+```mermaid
+graph TD
+    subgraph "数据源 Data Sources"
+        DS[财经新闻/公告/行情API]
+    end
+    
+    subgraph "数据处理层 Python - Event-Driven"
+        P1[数据采集 Producer]
+        MQ[Redis\n消息队列 RQ]
+        P2[AI分析 Worker]
+    end
+    
+    subgraph "数据存储层 Data Storage"
+        DB[MySQL / PostgreSQL]
+        Cache[Redis\nPub/Sub Channel]
+    end
+
+    subgraph "后端服务层 Go - Dual-Channel"
+        G1[Gin RESTful API\n提供历史/聚合数据]
+        G2[WebSocket Server\n实时推送事件]
+    end
+    
+    subgraph "前端展示层 Vue 3"
+        F1[动态仪表盘 Dashboard]
+    end
+    
+    U[用户 User Browser]
+    ext_AI[智能AI引擎\nClaude 3 / Baidu ERNIE]
+
+    %% 1. 异步数据处理管道
+    DS -- "采集" --> P1
+    P1 -- "1. 投递任务" --> MQ
+    MQ -- "2. 消费任务" --> P2
+    P2 -- "3. 调用AI分析" --> ext_AI
+    ext_AI -- "返回结果" --> P2
+    P2 -- "4a. 持久化结果" --> DB
+    P2 -- "4b. 发布事件通知" --> Cache
+
+    %% 2. 双通道后端服务
+    DB -- "查询" --> G1
+    Cache -- "订阅" --> G2
+    
+    %% 3. 前端与后端交互
+    G1 -- "API Pull" --> F1
+    G2 -- "Push" --> F1
+    F1 <--> U
+
+
+```
+
+---
+
+### **二、 核心技术栈 (Tech Stack V2.0)**
+
+*   **数据处理 (Python):**
+    *   **数据采集:** `requests` + `BeautifulSoup` / `scrapy`
+    *   **消息队列:** `Redis` + `rq` (Python Redis Queue)
+    *   **任务调度:** `APScheduler` (用于驱动Producer)
+    *   **AI SDK:** `anthropic` (for Claude), `baidu-aip`
+*   **后端服务 (Go):**
+    *   **Web框架:** `Gin`
+    *   **WebSocket:** `gorilla/websocket`
+    *   **ORM:** `GORM`
+    *   **Redis客户端:** `go-redis`
+*   **数据库 & 缓存:**
+    *   **主数据库:** **MySQL 8.0**
+    *   **消息队列 & Pub/Sub:** **Redis**
+*   **前端:**
+    *   **框架:** **Vue 3** + **Vite**
+    *   **UI库:** **Element Plus**
+    *   **图表:** **Apache ECharts**
+*   **AI服务:**
+    *   **主引擎:** **Anthropic Claude 3** (Sonnet/Haiku)
+    *   **备用/降级引擎:** **百度智能云 ERNIE**
+*   **部署:**
+    *   **容器化:** **Docker** & **Docker Compose**
+    *   **Web服务器/反向代理:** **Nginx**
+
+---
+
+### **三、 数据库表结构设计 (保持不变)**
+
+*数据库表结构设计与V1.0方案一致，包含`stocks`, `market_data_daily`, `news`, `stock_news_relation`, `sentiments`, `events`等核心表。*
+
+---
+
+### **四、 核心模块实现要点 (V2.0 升级版)**
+
+#### **1. Python数据处理层 (事件驱动)**
+*   **生产者 (`producer.py`):** 由定时任务触发，仅负责抓取新闻，并立即将包含新闻URL和元数据的任务**投递到Redis队列**。自身不做任何耗时处理，确保高吞吐量。
+*   **消费者 (`worker.py`):** 独立进程，持续监听Redis队列。获取任务后，调用`CostAwareAnalyzer`进行分析。分析完成后，执行两个关键操作：
+    1.  **数据持久化：** 将详细分析结果写入MySQL的`sentiments`和`events`表。
+    2.  **事件发布：** 如果判断为重大事件，则向Redis的`realtime-events`频道**发布一条JSON格式的精简消息**（例如 `{"ticker": "688256.SH", "event": "发布重磅新品"}`）。
+
+#### **2. 智能AI分析模块 (`CostAwareAnalyzer`)**
+*   **智能分级调用：** 封装一个核心分析函数，内部逻辑优先调用Claude 3 API。通过精心设计的Prompt，力求在**单次API调用**中完成新闻摘要、事件类型判断、情绪打分等多项任务。
+*   **成本控制与降级：** 内置预算追踪机制。当调用失败或日成本超预算时，**自动降级**至百度ERNIE API执行基础的情绪分析，保证服务的韧性。
+
+#### **3. Go后端服务层 (双通道)**
+*   **RESTful API (Gin):** 职责不变，负责提供“拉取(Pull)”式的数据服务。重点在于**Service层的多因子情绪指数计算逻辑**，它会聚合数据库中的数据，并应用我们设计的时间衰减、来源权重等高级算法。
+*   **WebSocket Server (gorilla/websocket):**
+    *   启动一个goroutine，使用`go-redis`客户端**订阅`realtime-events`频道**。
+    *   维护一个并发安全的连接池，管理所有活跃的前端WebSocket连接。
+    *   一旦从Redis频道收到新消息，立即将其**广播**给所有连接的客户端。
+
+#### **4. 前端展示层 (动态实时)**
+*   **WebSocket集成：** 在Vue应用的主组件（如`App.vue`）的`onMounted`生命周期钩子中，初始化与后端的WebSocket连接，并设置`onmessage`监听器。
+*   **实时反馈：**
+    1.  **即时通知:** 当`onmessage`监听到新事件时，调用Element Plus的`ElNotification`组件，在屏幕右上角弹出非侵入式的消息提醒。
+    2.  **图表动态更新:** 将收到的事件数据传递给ECharts图表组件，调用ECharts实例的`setOption`方法，**动态地**在图表上增加一个新的`markPoint`，全程无需页面刷新。
+
+### **五、 里程碑 (Milestones V2.0 修订版)**
+
+*   **Week 1: 攻坚智能核心与异步管道**
+    *   **目标:** 跑通“生产者(Producer) -> Redis消息队列 -> 消费者(Worker) -> AI分析 -> 数据库”的全异步流程。
+    *   **交付:** 一个能在后台默默处理新闻，并把结果存入数据库的健壮数据处理系统。
+*   **Week 2: 构建双通道后端服务**
+    *   **目标:** 完成所有RESTful API和WebSocket实时推送服务的开发。
+    *   **交付:** 一个可以用Postman测试历史数据接口，并用WebSocket客户端接收实时消息的Go后端。
+*   **Week 3: 打造动态实时前端**
+    *   **目标:** 完成前端Dashboard开发，实现历史数据图表展示，并成功集成WebSocket，能接收并展示实时事件通知和图表标记。
+    *   **交付:** 一个功能完整的、具备实时能力的动态Web应用原型。
+*   **Week 4: 生产级部署与深度总结**
+    *   **目标:** 将包含多个微服务（Go, Python Workers, Redis等）的整套系统通过Docker Compose部署到云端，并产出高质量的项目文档。
+    *   **交付:** 一个公网可访问的项目URL，一份突出事件驱动和实时特性的GitHub README，以及一篇分享架构思考的深度技术博客。
