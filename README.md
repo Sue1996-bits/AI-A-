@@ -1,5 +1,7 @@
 **聚焦A股科技股，利用AI API进行深度情绪与事件分析**——完整、可落地、且亮点突出的技术方案。
 
+> **代码实现**：第一周的 Python 数据管道（新浪财经爬虫 → Redis/RQ 队列 → Gemini/DeepSeek 分级分析 → MySQL）在 [`data-python/`](data-python/) 目录，架构说明、运行流程和当前进度见 [data-python/README.md](data-python/README.md)。
+
 ---
 
 ### **项目名称：** “**Tech-Pulse**” - AI驱动的A股科技股情绪与事件分析系统

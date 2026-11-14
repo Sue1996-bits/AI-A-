@@ -1,0 +1,19 @@
+# 消息队列
+redis==6.4.0
+rq==2.6.0
+croniter==6.0.0
+
+# 网络请求 & 爬虫
+requests==2.32.5
+beautifulsoup4==4.13.5
+lxml
+aiohttp
+
+# 数据库
+SQLAlchemy
+PyMySQL
+
+# 配置
+python-dotenv
+python-dateutil==2.9.0.post0
+pytz==2025.2
